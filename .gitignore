@@ -1,0 +1,6 @@
+/target
+
+# Test scripts and results
+test_*.sh
+test_results/
+temp_mps/

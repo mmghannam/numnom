@@ -1,0 +1,9 @@
+[package]
+name = "numnom"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nom = "7.1"
+russcip = { version = "0.9", features = ["bundled"] }
+anyhow = "1.0"
