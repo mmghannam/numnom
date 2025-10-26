@@ -1,0 +1,443 @@
+{
+  "name": "flugpl",
+  "variables": [
+    {
+      "name": "ANM1",
+      "obj_coeff": 1500.0,
+      "type": "integer",
+      "lb": 0.0,
+      "ub": 18.0
+    },
+    {
+      "name": "ANM2",
+      "obj_coeff": 1500.0,
+      "type": "integer",
+      "lb": 0.0,
+      "ub": 18.0
+    },
+    {
+      "name": "ANM3",
+      "obj_coeff": 1500.0,
+      "type": "integer",
+      "lb": 0.0,
+      "ub": 18.0
+    },
+    {
+      "name": "ANM4",
+      "obj_coeff": 1500.0,
+      "type": "integer",
+      "lb": 0.0,
+      "ub": 18.0
+    },
+    {
+      "name": "ANM5",
+      "obj_coeff": 1500.0,
+      "type": "integer",
+      "lb": 0.0,
+      "ub": 18.0
+    },
+    {
+      "name": "ANM6",
+      "obj_coeff": 1500.0,
+      "type": "integer",
+      "lb": 0.0,
+      "ub": 18.0
+    },
+    {
+      "name": "STM1",
+      "obj_coeff": 2700.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    },
+    {
+      "name": "STM2",
+      "obj_coeff": 2700.0,
+      "type": "integer",
+      "lb": 57.0,
+      "ub": 75.0
+    },
+    {
+      "name": "STM3",
+      "obj_coeff": 2700.0,
+      "type": "integer",
+      "lb": 57.0,
+      "ub": 75.0
+    },
+    {
+      "name": "STM4",
+      "obj_coeff": 2700.0,
+      "type": "integer",
+      "lb": 57.0,
+      "ub": 75.0
+    },
+    {
+      "name": "STM5",
+      "obj_coeff": 2700.0,
+      "type": "integer",
+      "lb": 57.0,
+      "ub": 75.0
+    },
+    {
+      "name": "STM6",
+      "obj_coeff": 2700.0,
+      "type": "integer",
+      "lb": 57.0,
+      "ub": 75.0
+    },
+    {
+      "name": "UE1",
+      "obj_coeff": 30.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    },
+    {
+      "name": "UE2",
+      "obj_coeff": 30.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    },
+    {
+      "name": "UE3",
+      "obj_coeff": 30.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    },
+    {
+      "name": "UE4",
+      "obj_coeff": 30.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    },
+    {
+      "name": "UE5",
+      "obj_coeff": 30.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    },
+    {
+      "name": "UE6",
+      "obj_coeff": 30.0,
+      "type": "continuous",
+      "lb": 0.0,
+      "ub": null
+    }
+  ],
+  "constraints": [
+    {
+      "name": "ANZ1",
+      "coefficients": [
+        {
+          "var_name": "STM1",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 60.0,
+      "rhs": 60.0
+    },
+    {
+      "name": "STD1",
+      "coefficients": [
+        {
+          "var_name": "ANM1",
+          "coeff": -100.0
+        },
+        {
+          "var_name": "STM1",
+          "coeff": 150.0
+        },
+        {
+          "var_name": "UE1",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 8000.0,
+      "rhs": null
+    },
+    {
+      "name": "UEB1",
+      "coefficients": [
+        {
+          "var_name": "STM1",
+          "coeff": -20.0
+        },
+        {
+          "var_name": "UE1",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "ANZ2",
+      "coefficients": [
+        {
+          "var_name": "ANM1",
+          "coeff": 1.0
+        },
+        {
+          "var_name": "STM1",
+          "coeff": 0.9
+        },
+        {
+          "var_name": "STM2",
+          "coeff": -1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "STD2",
+      "coefficients": [
+        {
+          "var_name": "ANM2",
+          "coeff": -100.0
+        },
+        {
+          "var_name": "STM2",
+          "coeff": 150.0
+        },
+        {
+          "var_name": "UE2",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 9000.0,
+      "rhs": null
+    },
+    {
+      "name": "UEB2",
+      "coefficients": [
+        {
+          "var_name": "STM2",
+          "coeff": -20.0
+        },
+        {
+          "var_name": "UE2",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "ANZ3",
+      "coefficients": [
+        {
+          "var_name": "ANM2",
+          "coeff": 1.0
+        },
+        {
+          "var_name": "STM2",
+          "coeff": 0.9
+        },
+        {
+          "var_name": "STM3",
+          "coeff": -1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "STD3",
+      "coefficients": [
+        {
+          "var_name": "ANM3",
+          "coeff": -100.0
+        },
+        {
+          "var_name": "STM3",
+          "coeff": 150.0
+        },
+        {
+          "var_name": "UE3",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 8000.0,
+      "rhs": null
+    },
+    {
+      "name": "UEB3",
+      "coefficients": [
+        {
+          "var_name": "STM3",
+          "coeff": -20.0
+        },
+        {
+          "var_name": "UE3",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "ANZ4",
+      "coefficients": [
+        {
+          "var_name": "ANM3",
+          "coeff": 1.0
+        },
+        {
+          "var_name": "STM3",
+          "coeff": 0.9
+        },
+        {
+          "var_name": "STM4",
+          "coeff": -1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "STD4",
+      "coefficients": [
+        {
+          "var_name": "ANM4",
+          "coeff": -100.0
+        },
+        {
+          "var_name": "STM4",
+          "coeff": 150.0
+        },
+        {
+          "var_name": "UE4",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 10000.0,
+      "rhs": null
+    },
+    {
+      "name": "UEB4",
+      "coefficients": [
+        {
+          "var_name": "STM4",
+          "coeff": -20.0
+        },
+        {
+          "var_name": "UE4",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "ANZ5",
+      "coefficients": [
+        {
+          "var_name": "ANM4",
+          "coeff": 1.0
+        },
+        {
+          "var_name": "STM4",
+          "coeff": 0.9
+        },
+        {
+          "var_name": "STM5",
+          "coeff": -1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "STD5",
+      "coefficients": [
+        {
+          "var_name": "ANM5",
+          "coeff": -100.0
+        },
+        {
+          "var_name": "STM5",
+          "coeff": 150.0
+        },
+        {
+          "var_name": "UE5",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 9000.0,
+      "rhs": null
+    },
+    {
+      "name": "UEB5",
+      "coefficients": [
+        {
+          "var_name": "STM5",
+          "coeff": -20.0
+        },
+        {
+          "var_name": "UE5",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "ANZ6",
+      "coefficients": [
+        {
+          "var_name": "ANM5",
+          "coeff": 1.0
+        },
+        {
+          "var_name": "STM5",
+          "coeff": 0.9
+        },
+        {
+          "var_name": "STM6",
+          "coeff": -1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    },
+    {
+      "name": "STD6",
+      "coefficients": [
+        {
+          "var_name": "ANM6",
+          "coeff": -100.0
+        },
+        {
+          "var_name": "STM6",
+          "coeff": 150.0
+        },
+        {
+          "var_name": "UE6",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": 12000.0,
+      "rhs": null
+    },
+    {
+      "name": "UEB6",
+      "coefficients": [
+        {
+          "var_name": "STM6",
+          "coeff": -20.0
+        },
+        {
+          "var_name": "UE6",
+          "coeff": 1.0
+        }
+      ],
+      "lhs": null,
+      "rhs": null
+    }
+  ]
+}
