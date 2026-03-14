@@ -13,7 +13,11 @@ A fast MPS file parser written in Rust.
 ## Installation
 
 ```bash
-cargo install --path .
+# As a library
+cargo add numnom
+
+# As a CLI tool
+cargo install numnom
 ```
 
 ## Usage
