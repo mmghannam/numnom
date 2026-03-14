@@ -33,15 +33,13 @@ numnom problem.mps.gz --timings
 
 Example output:
 ```
-Name:        neos-631709
-Rows:        46496
-Cols:        45150
-Nonzeros:    225148
-Sense:       minimize
-Obj offset:  0
-Parsed in:   18.743ms
-Integer:     45150
-Continuous:  0
+  neos-631709 (min)
+
+  Rows              46.5K    Cols            45.1K
+  Nonzeros         225.1K    Density       0.0107%
+  Variables    45.1K binary
+
+  Parsed in 19.0ms
 ```
 
 ### Library

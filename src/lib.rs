@@ -38,6 +38,8 @@ enum Parsekey {
 #[derive(Debug, Default)]
 pub struct SectionTimings {
     pub read: std::time::Duration,
+    pub file_bytes: u64, // compressed size on disk
+    pub data_bytes: u64, // decompressed size in memory
     pub rows: std::time::Duration,
     pub cols: std::time::Duration,
     pub rhs: std::time::Duration,
@@ -1007,10 +1009,15 @@ pub fn parse_mps_file_timed(
     path: &str,
     timings: &mut Option<SectionTimings>,
 ) -> Result<Model, String> {
+    let file_size = std::fs::metadata(path)
+        .map(|m| m.len())
+        .unwrap_or(0);
     let read_start = std::time::Instant::now();
     let buf = read_file_fast(path)?;
     if let Some(t) = timings {
         t.read = read_start.elapsed();
+        t.file_bytes = file_size;
+        t.data_bytes = buf.len() as u64;
     }
     parse_mps_str_timed(&buf, timings)
 }
