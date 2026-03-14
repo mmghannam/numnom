@@ -51,17 +51,17 @@ pub struct SectionTimings {
 /// Sparse column-wise matrix (CSC format).
 #[derive(Debug, Default)]
 pub struct SparseMatrix {
-    pub start: Vec<i32>,
-    pub index: Vec<i32>,
+    pub start: Vec<u32>,
+    pub index: Vec<u32>,
     pub value: Vec<f64>,
 }
 
-/// Parsed MPS model — mirrors HiGHS internal representation.
+/// Parsed MPS model.
 #[derive(Debug, Default)]
 pub struct Model {
     pub name: String,
-    pub num_row: i32,
-    pub num_col: i32,
+    pub num_row: u32,
+    pub num_col: u32,
     pub obj_sense_minimize: bool,
     pub obj_offset: f64,
     pub objective_name: String,
@@ -78,9 +78,9 @@ pub struct Model {
 
 /// Parser borrows from input string to avoid allocations during hot loops.
 struct Parser<'a> {
-    num_row: i32,
-    num_col: i32,
-    num_nz: i32,
+    num_row: u32,
+    num_col: u32,
+    num_nz: u32,
 
     obj_sense_minimize: bool,
     obj_offset: f64,
@@ -100,13 +100,14 @@ struct Parser<'a> {
     row_type: Vec<RowType>,
 
     // CSC matrix built directly during COLUMNS parsing (no intermediate triplets)
-    a_start: Vec<i32>,
-    a_index: Vec<i32>,
+    a_start: Vec<u32>,
+    a_index: Vec<u32>,
     a_value: Vec<f64>,
     col_cost: Vec<f64>,
 
+    // Uses i32 because -1 = objective row, -2 = free row
     rowname2idx: HashMap<&'a str, i32>,
-    colname2idx: HashMap<&'a str, i32>,
+    colname2idx: HashMap<&'a str, u32>,
 
 }
 
@@ -138,7 +139,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn get_col_idx(&mut self, name: &'a str) -> i32 {
+    fn get_col_idx(&mut self, name: &'a str) -> u32 {
         if let Some(&idx) = self.colname2idx.get(name) {
             return idx;
         }
@@ -206,17 +207,25 @@ impl<'a> Parser<'a> {
         input: &'a str,
         timings: &mut Option<SectionTimings>,
     ) -> Result<(), String> {
-        // Pre-allocate based on input size to avoid Vec reallocation copies
-        let est_nz = input.len() / 30; // ~30 bytes per nonzero in MPS
-        let est_cols = est_nz / 10; // ~10 nz per column on average
+        // Try to read size hints from comment headers (e.g., *ROWS: 124, *NONZERO: 91028)
+        let (hint_rows, hint_cols, hint_nz) = parse_size_hints(input);
+
+        let est_nz = hint_nz.unwrap_or(input.len() / 30);
+        let est_cols = hint_cols.unwrap_or(est_nz / 10);
+        let est_rows = hint_rows.unwrap_or(est_cols / 4);
         self.a_index.reserve(est_nz);
         self.a_value.reserve(est_nz);
         self.a_start.reserve(est_cols);
         self.col_names.reserve(est_cols);
+        self.col_cost.reserve(est_cols);
         self.col_lower.reserve(est_cols);
         self.col_upper.reserve(est_cols);
         self.col_integrality.reserve(est_cols);
         self.col_binary.reserve(est_cols);
+        self.row_names.reserve(est_rows);
+        self.row_lower.reserve(est_rows);
+        self.row_upper.reserve(est_rows);
+        self.row_type.reserve(est_rows);
 
         let mut lines = input.lines();
         let mut keyword = Parsekey::None;
@@ -233,7 +242,7 @@ impl<'a> Parser<'a> {
                     // Build colname2idx after COLUMNS — deferred for speed
                     self.colname2idx.reserve(self.num_col as usize);
                     for (i, &name) in self.col_names.iter().enumerate() {
-                        self.colname2idx.insert(name, i as i32);
+                        self.colname2idx.insert(name, i as u32);
                     }
                 }
                 Parsekey::Rhs => keyword = self.parse_rhs(&mut lines),
@@ -379,7 +388,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 b'L' => {
-                    self.rowname2idx.insert(rowname, self.num_row);
+                    self.rowname2idx.insert(rowname, self.num_row as i32);
                     self.row_names.push(rowname);
                     self.row_lower.push(-INF);
                     self.row_upper.push(0.0);
@@ -387,7 +396,7 @@ impl<'a> Parser<'a> {
                     self.num_row += 1;
                 }
                 b'G' => {
-                    self.rowname2idx.insert(rowname, self.num_row);
+                    self.rowname2idx.insert(rowname, self.num_row as i32);
                     self.row_names.push(rowname);
                     self.row_lower.push(0.0);
                     self.row_upper.push(INF);
@@ -395,7 +404,7 @@ impl<'a> Parser<'a> {
                     self.num_row += 1;
                 }
                 b'E' => {
-                    self.rowname2idx.insert(rowname, self.num_row);
+                    self.rowname2idx.insert(rowname, self.num_row as i32);
                     self.row_names.push(rowname);
                     self.row_lower.push(0.0);
                     self.row_upper.push(0.0);
@@ -417,17 +426,15 @@ impl<'a> Parser<'a> {
 
         let num_row = self.num_row as usize;
         let mut col_value: Vec<f64> = vec![0.0; num_row];
-        let mut col_index: Vec<i32> = Vec::with_capacity(num_row);
+        let mut col_index: Vec<u32> = Vec::with_capacity(num_row);
         let mut col_count: usize = 0;
         let mut col_cost: f64 = 0.0;
 
         macro_rules! flush_column {
             ($self:expr) => {
                 if $self.num_col > 0 {
-                    // Store obj coeff for this column
                     $self.col_cost.push(col_cost);
                     col_cost = 0.0;
-                    // Build CSC directly: record start, append index/value
                     $self.a_start.push($self.num_nz);
                     for i in 0..col_count {
                         let row = col_index[i];
@@ -529,7 +536,7 @@ impl<'a> Parser<'a> {
                         let ru = rowidx as usize;
                         if col_value[ru] == 0.0 {
                             col_value[ru] = value;
-                            col_index.push(rowidx);
+                            col_index.push(rowidx as u32);
                             col_count += 1;
                         }
                     } else if rowidx == -1 {
@@ -883,6 +890,47 @@ impl<'a> Parser<'a> {
             col_integrality: self.col_integrality,
         }
     }
+}
+
+/// Parse size hints from MPS comment headers.
+/// Some files have lines like: *ROWS: 124  *COLUMNS: 10757  *NONZERO: 91028
+fn parse_size_hints(input: &str) -> (Option<usize>, Option<usize>, Option<usize>) {
+    let mut rows = None;
+    let mut cols = None;
+    let mut nz = None;
+
+    for line in input.lines().take(20) {
+        if !line.starts_with('*') {
+            if line.trim_start().starts_with("NAME") {
+                break; // past the header comments
+            }
+            continue;
+        }
+        let upper = line.to_ascii_uppercase();
+        if let Some(pos) = upper.find("ROWS:") {
+            if let Some(val) = extract_hint_number(&line[pos + 5..]) {
+                rows = Some(val);
+            }
+        } else if let Some(pos) = upper.find("COLUMNS:") {
+            if let Some(val) = extract_hint_number(&line[pos + 8..]) {
+                cols = Some(val);
+            }
+        } else if let Some(pos) = upper.find("NONZERO:") {
+            if let Some(val) = extract_hint_number(&line[pos + 8..]) {
+                nz = Some(val);
+            }
+        }
+    }
+    (rows, cols, nz)
+}
+
+fn extract_hint_number(s: &str) -> Option<usize> {
+    s.trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .trim()
+        .parse::<usize>()
+        .ok()
 }
 
 /// Fast f64 parsing for common MPS number formats.

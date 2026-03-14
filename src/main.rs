@@ -33,27 +33,29 @@ fn fmt_time(ms: f64) -> String {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
+    let quiet = args.iter().any(|a| a == "--quiet" || a == "-q");
     let help = args.iter().any(|a| a == "--help" || a == "-h");
     let file_args: Vec<&String> = args[1..].iter().filter(|a| !a.starts_with('-')).collect();
 
     if help || file_args.is_empty() {
-        eprintln!("Usage: numnom <file.mps|file.mps.gz> [--timings]");
+        eprintln!("Usage: numnom <file.mps|file.mps.gz> [-q|--quiet]");
         std::process::exit(1);
     }
 
     let path = file_args[0];
 
-    let filename = std::path::Path::new(path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(path);
-    let is_gz = path.ends_with(".gz");
-
-    eprint!("  Loading {filename}");
-    if is_gz {
-        eprint!(" (decompressing)");
+    if !quiet {
+        let filename = std::path::Path::new(path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(path);
+        let is_gz = path.ends_with(".gz");
+        eprint!("  Loading {filename}");
+        if is_gz {
+            eprint!(" (decompressing)");
+        }
+        eprint!("...");
     }
-    eprint!("...");
 
     let mut timings = Some(numnom::SectionTimings::default());
 
@@ -67,7 +69,14 @@ fn main() {
     };
     let elapsed = start.elapsed();
     let ms = elapsed.as_secs_f64() * 1000.0;
-    eprintln!(" done in {}", fmt_time(ms));
+
+    if !quiet {
+        eprintln!(" done in {}", fmt_time(ms));
+    }
+
+    if quiet {
+        return;
+    }
 
     let n_int = model
         .col_integrality
@@ -89,7 +98,6 @@ fn main() {
         .count();
     let n_int_only = n_int - n_bin;
 
-    // Header
     let name = if model.name.is_empty() {
         std::path::Path::new(path)
             .file_stem()
@@ -143,7 +151,6 @@ fn main() {
     }
 
     println!();
-
     println!("  Timing");
     println!("  ------");
     println!();
@@ -152,7 +159,6 @@ fn main() {
         let read_ms = t.read.as_secs_f64() * 1000.0;
         let parse_ms = ms - read_ms;
 
-        // Breakdown
         let sections = [
             ("Rows", t.rows),
             ("Columns", t.cols),
@@ -176,13 +182,22 @@ fn main() {
                 fmt_time(read_ms)
             );
         }
-        println!("  Parse        {} in {}", fmt_bytes(t.data_bytes), fmt_time(parse_ms));
+        println!(
+            "  Parse        {} in {}",
+            fmt_bytes(t.data_bytes),
+            fmt_time(parse_ms)
+        );
 
         for (name, dur) in &sections {
             let section_ms = dur.as_secs_f64() * 1000.0;
             if section_ms >= 0.01 {
                 let pct = section_ms / parse_ms * 100.0;
-                println!("    {:<10} {:>10}  ({:.0}%)", name, fmt_time(section_ms), pct);
+                println!(
+                    "    {:<10} {:>10}  ({:.0}%)",
+                    name,
+                    fmt_time(section_ms),
+                    pct
+                );
             }
         }
         println!();
