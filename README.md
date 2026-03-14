@@ -1,5 +1,9 @@
 # numnom
 
+[![crates.io](https://img.shields.io/crates/v/numnom.svg)](https://crates.io/crates/numnom)
+[![docs.rs](https://docs.rs/numnom/badge.svg)](https://docs.rs/numnom)
+[![license](https://img.shields.io/crates/l/numnom.svg)](LICENSE)
+
 A fast MPS file parser written in Rust.
 
 ## Features
