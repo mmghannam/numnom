@@ -12,6 +12,7 @@ exclude = ["temp_mps/", "*.sh", "test_output.json", "test_binary.mps", "benchmar
 [dependencies]
 flate2 = { version = "1.0", features = ["zlib-rs"], default-features = false }
 rustc-hash = "2"
+fast-float2 = "0.2"
 
 [profile.release]
 lto = true

@@ -933,71 +933,23 @@ fn extract_hint_number(s: &str) -> Option<usize> {
         .ok()
 }
 
-/// Fast f64 parsing for common MPS number formats.
+/// Fast f64 parsing for MPS number formats.
+/// Uses fast-float2 for bit-exact results matching Rust's str::parse::<f64>().
+/// Handles MPS-specific 'd'/'D' exponent notation by replacing with 'e'.
 #[inline]
 fn fast_float(s: &str) -> f64 {
-    let bytes = s.as_bytes();
-    if bytes.is_empty() {
+    if s.is_empty() {
         return 0.0;
     }
-
-    let mut i = 0;
-    let negative = bytes[0] == b'-';
-    if negative || bytes[0] == b'+' {
-        i += 1;
-    }
-
-    let mut int_part: u64 = 0;
-    while i < bytes.len() && bytes[i].is_ascii_digit() {
-        int_part = int_part * 10 + (bytes[i] - b'0') as u64;
-        i += 1;
-    }
-
-    let mut frac = 0.0f64;
-    if i < bytes.len() && bytes[i] == b'.' {
-        i += 1;
-        let mut scale = 0.1;
-        while i < bytes.len() && bytes[i].is_ascii_digit() {
-            frac += (bytes[i] - b'0') as f64 * scale;
-            scale *= 0.1;
-            i += 1;
-        }
-    }
-
-    let mut result = int_part as f64 + frac;
-
-    if i < bytes.len() && matches!(bytes[i], b'e' | b'E' | b'd' | b'D') {
-        i += 1;
-        let exp_neg = i < bytes.len() && bytes[i] == b'-';
-        if exp_neg || (i < bytes.len() && bytes[i] == b'+') {
-            i += 1;
-        }
-        let mut exp: i32 = 0;
-        while i < bytes.len() && bytes[i].is_ascii_digit() {
-            exp = exp * 10 + (bytes[i] - b'0') as i32;
-            i += 1;
-        }
-        if exp_neg {
-            exp = -exp;
-        }
-        result *= pow10(exp);
-    }
-
-    if negative { -result } else { result }
-}
-
-#[inline]
-fn pow10(exp: i32) -> f64 {
-    const POS: [f64; 23] = [
-        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
-        1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
-    ];
-    if exp >= 0 && (exp as usize) < POS.len() {
-        POS[exp as usize]
-    } else if exp < 0 && ((-exp) as usize) < POS.len() {
-        1.0 / POS[(-exp) as usize]
+    // Check for 'd'/'D' exponent (Fortran-style, used in some MPS files).
+    // fast-float2 only handles 'e'/'E', so replace if needed.
+    if let Some(pos) = s.as_bytes().iter().position(|&b| b == b'd' || b == b'D') {
+        let mut buf = s.to_owned();
+        // SAFETY: replacing single ASCII byte with another ASCII byte
+        unsafe { buf.as_bytes_mut()[pos] = b'e'; }
+        fast_float2::parse(&buf).unwrap_or(0.0)
     } else {
-        10.0f64.powi(exp)
+        fast_float2::parse(s).unwrap_or(0.0)
     }
 }
 
