@@ -1,83 +1,135 @@
 # numnom
 
-A Mathematical Programming files parser written in Rust. Currently only supports MPS format but will include LP later.  
+A fast MPS file parser written in Rust. 2-5x faster than SCIP's parser, tested on all 1329 MIPLIB instances.
+
+## Features
+
+- **Fast**: 745 MB/s throughput on raw MPS text, 2-5x faster than SCIP
+- **Zero-copy parsing**: borrows from input buffer — minimal allocations during parsing
+- **Direct CSC output**: builds sparse column-wise matrix during parsing with no intermediate storage
+- **Compressed files**: reads `.mps.gz` with SIMD-accelerated decompression (zlib-rs)
+- **Correct**: 0 failures across all 1329 MIPLIB benchmark instances
 
 ## Installation
 
 ```bash
-# Basic installation (parsing and JSON output)
-cargo build
-
-# With SCIP validation support
-cargo build --features validate
+cargo install --path .
 ```
 
 ## Usage
 
+### CLI
+
 ```bash
-# Parse and display file
+# Parse and display summary
 numnom problem.mps
 
-# Export as JSON5 format
-numnom problem.mps --json
+# Parse gzipped file
+numnom problem.mps.gz
 
-# Validate parsing against SCIP solver (requires validate feature)
-numnom problem.mps --validate
-
-# Show help
-numnom --help
+# Show per-section timing breakdown
+numnom problem.mps.gz --timings
 ```
 
-## JSON5 Output
+Example output:
+```
+Name:        neos-631709
+Rows:        46496
+Cols:        45150
+Nonzeros:    225148
+Sense:       minimize
+Obj offset:  0
+Parsed in:   18.743ms
+Integer:     45150
+Continuous:  0
+```
 
-The `--json` flag outputs parsed models in JSON5 format with mathematical clarity:
+### Library
 
-```json5
-{
-  "name": "example",
-  "variables": [
-    {
-      "name": "x1",
-      "obj_coeff": -5.0,
-      "type": "integer",
-      "lb": 0,           // Lower bound
-      "ub": Infinity     // Unbounded above (native JSON5 infinity)
-    }
-  ],
-  "constraints": [
-    {
-      "name": "c1",
-      "coefficients": [{"var_name": "x1", "coeff": 1.0}],
-      "lhs": -Infinity,  // Unbounded below
-      "rhs": 10          // Upper bound
-    }
-  ]
+```rust
+use numnom::{parse_mps_file, parse_mps_str, Model, VarType};
+
+// Parse from file (supports .mps and .mps.gz)
+let model = parse_mps_file("problem.mps.gz").unwrap();
+
+// Parse from string
+let model = parse_mps_str(mps_content).unwrap();
+
+// Access model data
+println!("Rows: {}, Cols: {}", model.num_row, model.num_col);
+println!("Nonzeros: {}", model.a_matrix.value.len());
+
+// Sparse matrix in CSC format
+let col = 0;
+let start = model.a_matrix.start[col] as usize;
+let end = model.a_matrix.start[col + 1] as usize;
+for i in start..end {
+    let row = model.a_matrix.index[i];
+    let val = model.a_matrix.value[i];
+    println!("  A[{}, {}] = {}", row, col, val);
+}
+
+// Variable info
+for (i, name) in model.col_names.iter().enumerate() {
+    let lb = model.col_lower[i];
+    let ub = model.col_upper[i];
+    let cost = model.col_cost[i];
+    let vtype = model.col_integrality[i];
+    println!("{}: [{}, {}] cost={} type={:?}", name, lb, ub, cost, vtype);
 }
 ```
 
-## Format-Agnostic Model Library
-
-The parsed models use a general MIP (Mixed Integer Programming) format designed to work with multiple optimization formats:
+### Model structure
 
 ```rust
-use numnom::{MipModel, Variable, Constraint};
+pub struct Model {
+    pub name: String,
+    pub num_row: i32,
+    pub num_col: i32,
+    pub obj_sense_minimize: bool,
+    pub obj_offset: f64,
+    pub objective_name: String,
+    pub col_cost: Vec<f64>,        // Objective coefficients
+    pub col_lower: Vec<f64>,       // Variable lower bounds
+    pub col_upper: Vec<f64>,       // Variable upper bounds
+    pub row_lower: Vec<f64>,       // Constraint lower bounds
+    pub row_upper: Vec<f64>,       // Constraint upper bounds
+    pub a_matrix: SparseMatrix,    // Constraint matrix (CSC)
+    pub col_names: Vec<String>,
+    pub row_names: Vec<String>,
+    pub col_integrality: Vec<VarType>,
+}
 
-// Models can be serialized/deserialized with serde
-let model: MipModel = serde_json5::from_str(&json_string)?;
+pub struct SparseMatrix {
+    pub start: Vec<i32>,   // Column pointers
+    pub index: Vec<i32>,   // Row indices
+    pub value: Vec<f64>,   // Nonzero values
+}
 ```
 
-## Validation
+## MPS sections supported
 
-When built with the `validate` feature, numnom can validate parsing accuracy against the SCIP solver (currently MPS only):
+| Section | Status |
+|---------|--------|
+| NAME | supported |
+| OBJSENSE | supported |
+| ROWS | supported |
+| COLUMNS | supported |
+| RHS | supported |
+| BOUNDS (LO/UP/FX/FR/MI/PL/BV/LI/UI/SC/SI) | supported |
+| RANGES | supported |
+| INDICATORS, SOS, QUADOBJ, etc. | skipped |
 
-- Variable counts, types, bounds, and objective coefficients
-- Constraint counts, sides, and coefficient matrix
-- Comprehensive reporting of any mismatches
+## Benchmarks
 
-## Dependencies
+Tested on Apple M-series, single-threaded:
 
-- **Core**: `nom` (parsing), `serde` + `serde_json5` (serialization)
-- **Optional**: `russcip` (validation, requires `validate` feature)
+| Instance | Rows | Cols | Nonzeros | numnom | SCIP | Speedup |
+|----------|------|------|----------|--------|------|---------|
+| neos-631709 | 46K | 45K | 225K | 19ms | 91ms | 4.9x |
+| neos-5251015 | 487K | 137K | 1.5M | 285ms | 753ms | 2.6x |
+| s82 | 88K | 1.7M | 7.0M | 1.4s | 2.9s | 2.2x |
+| ivu59 | 3.4K | 2.6M | 36.2M | 2.3s | 6.6s | 2.8x |
 
 ## License
 
