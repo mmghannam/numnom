@@ -1,14 +1,14 @@
 # numnom
 
-A fast MPS file parser written in Rust. 2-5x faster than SCIP's parser, tested on all 1329 MIPLIB instances.
+A fast MPS file parser written in Rust.
 
 ## Features
 
-- **Fast**: 745 MB/s throughput on raw MPS text, 2-5x faster than SCIP
+- **Fast**: 745 MB/s throughput on raw MPS text
 - **Zero-copy parsing**: borrows from input buffer — minimal allocations during parsing
 - **Direct CSC output**: builds sparse column-wise matrix during parsing with no intermediate storage
 - **Compressed files**: reads `.mps.gz` with SIMD-accelerated decompression (zlib-rs)
-- **Correct**: 0 failures across all 1329 MIPLIB benchmark instances
+- **Correct**: 0 failures across all 1065 MIPLIB 2017 instances
 
 ## Installation
 
@@ -27,19 +27,34 @@ numnom problem.mps
 # Parse gzipped file
 numnom problem.mps.gz
 
-# Show per-section timing breakdown
-numnom problem.mps.gz --timings
+# Quiet mode (validate only, no output)
+numnom problem.mps.gz -q
 ```
 
 Example output:
 ```
-  neos-631709 (min)
+  Loading s82.mps.gz (decompressing)... done in 1.35s
 
-  Rows              46.5K    Cols            45.1K
-  Nonzeros         225.1K    Density       0.0107%
-  Variables    45.1K binary
+  s82 (min)
 
-  Parsed in 19.0ms
+  Statistics
+  ----------
+
+  Rows              87.9K    Cols             1.7M
+  Nonzeros           7.0M    Density       0.0047%
+  Continuous           54
+  Binary             1.7M
+
+  Timing
+  ------
+
+  Decompress   49.5MB -> 884.8MB in 299.8ms
+  Parse        884.8MB in 1.05s
+    Rows            6.9ms  (1%)
+    Columns       580.9ms  (56%)
+    RHS             0.1ms  (0%)
+    Bounds        398.7ms  (38%)
+    Finalize       43.0ms  (4%)
 ```
 
 ### Library
@@ -82,8 +97,8 @@ for (i, name) in model.col_names.iter().enumerate() {
 ```rust
 pub struct Model {
     pub name: String,
-    pub num_row: i32,
-    pub num_col: i32,
+    pub num_row: u32,
+    pub num_col: u32,
     pub obj_sense_minimize: bool,
     pub obj_offset: f64,
     pub objective_name: String,
@@ -99,8 +114,8 @@ pub struct Model {
 }
 
 pub struct SparseMatrix {
-    pub start: Vec<i32>,   // Column pointers
-    pub index: Vec<i32>,   // Row indices
+    pub start: Vec<u32>,   // Column pointers
+    pub index: Vec<u32>,   // Row indices
     pub value: Vec<f64>,   // Nonzero values
 }
 ```
@@ -120,14 +135,21 @@ pub struct SparseMatrix {
 
 ## Benchmarks
 
-Tested on Apple M-series, single-threaded:
+Tested on Apple M-series, single-threaded. All times include gzip decompression.
 
-| Instance | Rows | Cols | Nonzeros | numnom | SCIP | Speedup |
-|----------|------|------|----------|--------|------|---------|
-| neos-631709 | 46K | 45K | 225K | 19ms | 91ms | 4.9x |
-| neos-5251015 | 487K | 137K | 1.5M | 285ms | 753ms | 2.6x |
-| s82 | 88K | 1.7M | 7.0M | 1.4s | 2.9s | 2.2x |
-| ivu59 | 3.4K | 2.6M | 36.2M | 2.3s | 6.6s | 2.8x |
+**MIPLIB 2017 benchmark set (240 instances):**
+
+| Metric | numnom | SCIP |
+|--------|--------|------|
+| Shifted geomean (s=10ms) | 19ms | 82ms |
+| Median | 10ms | 38ms |
+| P90 | 118ms | 243ms |
+| Max | 930ms | 2.9s |
+| **Speedup (shifted geomean)** | | **4.2x** |
+
+Correctness validated against [SCIP](https://www.scipopt.org/) via [russcip](https://github.com/scipopt/russcip) on all 1065 MIPLIB 2017 instances (0 failures).
+
+Per-instance results: [benchmarks.csv](benchmarks.csv)
 
 ## License
 
