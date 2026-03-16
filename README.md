@@ -12,7 +12,7 @@ A fast MPS file parser written in Rust.
 - **Zero-copy parsing**: borrows from input buffer — minimal allocations during parsing
 - **Direct CSC output**: builds sparse column-wise matrix during parsing with no intermediate storage
 - **Compressed files**: reads `.mps.gz` with SIMD-accelerated decompression (zlib-rs)
-- **Correct**: 0 failures across all 1065 MIPLIB 2017 instances
+- **Well-tested**: 0 failures across all 1065 MIPLIB 2017 instances
 
 ## Installation
 
