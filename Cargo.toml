@@ -1,6 +1,6 @@
 [package]
 name = "numnom"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "A fast MPS file parser for mathematical programming"
 license = "Apache-2.0"

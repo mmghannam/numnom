@@ -1027,6 +1027,264 @@ pub fn parse_mps_file(path: &str) -> Result<Model, String> {
     parse_mps_file_timed(path, &mut None)
 }
 
+// ─────────────────────────────────────────────────────────────────────
+//  MPS Writer
+// ─────────────────────────────────────────────────────────────────────
+
+/// Write a [`Model`] in MPS format to any [`std::io::Write`] sink.
+///
+/// Produces free-format MPS (space-separated fields) accepted by
+/// HiGHS, CPLEX, Gurobi, SCIP, and all other modern solvers. The
+/// output is a valid round-trip: `parse_mps_str(write_mps(m))` yields
+/// a model equivalent to `m`.
+///
+/// Handles:
+/// * `N` / `L` / `G` / `E` row types inferred from `row_lower` /
+///   `row_upper` (±∞ for one-sided, equal for equality).
+/// * Ranged rows (`row_lower < row_upper`, both finite) via the
+///   `RANGES` section.
+/// * Integer markers (`'MARKER' 'INTORG'` / `'INTEND'`) toggled per
+///   column as integrality changes.
+/// * Objective constant (`obj_offset`) emitted as a negated RHS entry
+///   for the objective row.
+/// * All standard bound types: `LO`, `UP`, `FX`, `FR`, `MI`, `BV`.
+pub fn write_mps<W: std::io::Write>(model: &Model, w: &mut W) -> std::io::Result<()> {
+    let ncol = model.num_col as usize;
+    let nrow = model.num_row as usize;
+
+    // ── NAME ──────────────────────────────────────────────────────
+    writeln!(w, "NAME          {}", model.name)?;
+
+    // ── OBJSENSE ──────────────────────────────────────────────────
+    if !model.obj_sense_minimize {
+        writeln!(w, "OBJSENSE")?;
+        writeln!(w, "    MAX")?;
+    }
+
+    // ── Classify rows ─────────────────────────────────────────────
+    // (row_type, rhs, optional range value)
+    #[derive(Clone, Copy)]
+    enum RType {
+        N,
+        L,
+        G,
+        E,
+    }
+    let mut row_info: Vec<(RType, f64, Option<f64>)> = Vec::with_capacity(nrow);
+    for i in 0..nrow {
+        let lo = model.row_lower[i];
+        let hi = model.row_upper[i];
+        let lo_fin = lo.is_finite();
+        let hi_fin = hi.is_finite();
+        if lo_fin && hi_fin {
+            if (hi - lo).abs() < 1e-12 {
+                // Equality.
+                row_info.push((RType::E, lo, None));
+            } else {
+                // Ranged: emit as L with rhs = hi, range = hi - lo.
+                row_info.push((RType::L, hi, Some(hi - lo)));
+            }
+        } else if hi_fin {
+            row_info.push((RType::L, hi, None));
+        } else if lo_fin {
+            row_info.push((RType::G, lo, None));
+        } else {
+            // Free row (both sides infinite). Emit as N.
+            row_info.push((RType::N, 0.0, None));
+        }
+    }
+
+    // ── ROWS ──────────────────────────────────────────────────────
+    writeln!(w, "ROWS")?;
+    let obj_name = if model.objective_name.is_empty() {
+        "OBJ"
+    } else {
+        &model.objective_name
+    };
+    writeln!(w, " N  {obj_name}")?;
+    for i in 0..nrow {
+        let letter = match row_info[i].0 {
+            RType::N => 'N',
+            RType::L => 'L',
+            RType::G => 'G',
+            RType::E => 'E',
+        };
+        writeln!(w, " {}  {}", letter, model.row_names[i])?;
+    }
+
+    // ── COLUMNS ───────────────────────────────────────────────────
+    writeln!(w, "COLUMNS")?;
+    let mut in_integer_block = false;
+    let mut marker_id = 0u32;
+    for j in 0..ncol {
+        let is_int = matches!(
+            model.col_integrality[j],
+            VarType::Integer | VarType::SemiInteger
+        );
+        // Toggle integer markers.
+        if is_int && !in_integer_block {
+            marker_id += 1;
+            writeln!(
+                w,
+                "    M{marker_id:07}  'MARKER'                 'INTORG'"
+            )?;
+            in_integer_block = true;
+        } else if !is_int && in_integer_block {
+            marker_id += 1;
+            writeln!(
+                w,
+                "    M{marker_id:07}  'MARKER'                 'INTEND'"
+            )?;
+            in_integer_block = false;
+        }
+
+        // Collect all nonzeros for column j: objective + matrix entries.
+        let col_name = &model.col_names[j];
+        let obj_c = model.col_cost[j];
+        let s = model.a_matrix.start[j] as usize;
+        let e = model.a_matrix.start[j + 1] as usize;
+
+        // Gather entries: (row_name, value).
+        let mut entries: Vec<(&str, f64)> = Vec::new();
+        if obj_c != 0.0 {
+            entries.push((obj_name, obj_c));
+        }
+        for k in s..e {
+            let ri = model.a_matrix.index[k] as usize;
+            let v = model.a_matrix.value[k];
+            if v != 0.0 {
+                entries.push((&model.row_names[ri], v));
+            }
+        }
+
+        // Emit in pairs (two entries per line) for compactness.
+        let mut idx = 0;
+        while idx < entries.len() {
+            let (rn, rv) = entries[idx];
+            if idx + 1 < entries.len() {
+                let (rn2, rv2) = entries[idx + 1];
+                writeln!(w, "    {col_name}  {rn}  {rv:.12e}  {rn2}  {rv2:.12e}")?;
+                idx += 2;
+            } else {
+                writeln!(w, "    {col_name}  {rn}  {rv:.12e}")?;
+                idx += 1;
+            }
+        }
+
+        // Columns with no entries still need to appear (they may have
+        // bounds). Emit a zero obj entry if the column would otherwise
+        // be invisible.
+        if entries.is_empty() {
+            writeln!(w, "    {col_name}  {obj_name}  0.000000000000e+00")?;
+        }
+    }
+    // Close any open integer block.
+    if in_integer_block {
+        marker_id += 1;
+        writeln!(
+            w,
+            "    M{marker_id:07}  'MARKER'                 'INTEND'"
+        )?;
+    }
+
+    // ── RHS ───────────────────────────────────────────────────────
+    writeln!(w, "RHS")?;
+    // Objective offset (negated back to MPS convention).
+    if model.obj_offset != 0.0 {
+        writeln!(
+            w,
+            "    RHS1  {obj_name}  {:.12e}",
+            -model.obj_offset
+        )?;
+    }
+    for i in 0..nrow {
+        let (_, rhs, _) = row_info[i];
+        if rhs != 0.0 {
+            writeln!(
+                w,
+                "    RHS1  {}  {rhs:.12e}",
+                model.row_names[i]
+            )?;
+        }
+    }
+
+    // ── RANGES ────────────────────────────────────────────────────
+    let has_ranges = row_info.iter().any(|(_, _, r)| r.is_some());
+    if has_ranges {
+        writeln!(w, "RANGES")?;
+        for i in 0..nrow {
+            if let (_, _, Some(range)) = row_info[i] {
+                writeln!(
+                    w,
+                    "    RNG1  {}  {range:.12e}",
+                    model.row_names[i]
+                )?;
+            }
+        }
+    }
+
+    // ── BOUNDS ─────────────────────────────────────────────────────
+    writeln!(w, "BOUNDS")?;
+    for j in 0..ncol {
+        let lo = model.col_lower[j];
+        let hi = model.col_upper[j];
+        let is_int = matches!(
+            model.col_integrality[j],
+            VarType::Integer | VarType::SemiInteger
+        );
+        let col_name = &model.col_names[j];
+
+        // Binary shorthand: integer with [0, 1].
+        if is_int && lo == 0.0 && hi == 1.0 {
+            writeln!(w, " BV BND1  {col_name}")?;
+            continue;
+        }
+
+        // Free variable (both infinite).
+        if !lo.is_finite() && !hi.is_finite() {
+            writeln!(w, " FR BND1  {col_name}")?;
+            continue;
+        }
+
+        // Fixed variable.
+        if lo.is_finite() && hi.is_finite() && (hi - lo).abs() < 1e-12 {
+            writeln!(w, " FX BND1  {col_name}  {lo:.12e}")?;
+            continue;
+        }
+
+        // Lower bound (default is 0, so skip if 0).
+        if lo.is_finite() {
+            if is_int {
+                writeln!(w, " LI BND1  {col_name}  {lo:.12e}")?;
+            } else if lo != 0.0 {
+                writeln!(w, " LO BND1  {col_name}  {lo:.12e}")?;
+            }
+        } else {
+            // -∞ lower bound.
+            writeln!(w, " MI BND1  {col_name}")?;
+        }
+
+        // Upper bound (default is +∞, so skip if +∞).
+        if hi.is_finite() {
+            if is_int {
+                writeln!(w, " UI BND1  {col_name}  {hi:.12e}")?;
+            } else {
+                writeln!(w, " UP BND1  {col_name}  {hi:.12e}")?;
+            }
+        }
+    }
+
+    // ── ENDATA ────────────────────────────────────────────────────
+    writeln!(w, "ENDATA")?;
+    Ok(())
+}
+
+/// Write a [`Model`] to a file path in MPS format.
+pub fn write_mps_file(model: &Model, path: &str) -> std::io::Result<()> {
+    let file = std::fs::File::create(path)?;
+    let mut w = std::io::BufWriter::new(file);
+    write_mps(model, &mut w)
+}
 
 #[cfg(test)]
 mod tests {
@@ -1076,6 +1334,161 @@ ENDATA
         assert_eq!(model.a_matrix.start, vec![0, 2, 4, 5]);
         assert_eq!(model.a_matrix.index, vec![0, 1, 0, 2, 1]);
         assert_eq!(model.a_matrix.value, vec![2.0, 3.0, 5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn test_write_roundtrip_complex_mip() {
+        // A model exercising every MPS feature the writer handles:
+        //   - MIN objective with offset
+        //   - L, G, E, and ranged rows
+        //   - Continuous, integer, and binary variables
+        //   - Free variable, fixed variable, negative lower bound
+        //   - Non-trivial matrix with multiple nonzeros per column
+        let mps_in = "\
+NAME          complex_mip
+ROWS
+ N  OBJ
+ L  LE_ROW
+ G  GE_ROW
+ E  EQ_ROW
+ L  RNG_ROW
+COLUMNS
+    X1  OBJ  1.0  LE_ROW  2.5
+    X1  GE_ROW  -1.0  EQ_ROW  3.0
+    INT1  'MARKER'  'INTORG'
+    Y1  OBJ  4.0  LE_ROW  1.0
+    Y1  GE_ROW  2.0  RNG_ROW  5.0
+    INT1  'MARKER'  'INTEND'
+    X2  EQ_ROW  7.0  RNG_ROW  -3.0
+    INT2  'MARKER'  'INTORG'
+    B1  OBJ  -1.0  LE_ROW  6.0
+    B1  GE_ROW  1.0
+    INT2  'MARKER'  'INTEND'
+    X3  OBJ  2.0  GE_ROW  4.0
+    X3  RNG_ROW  1.0
+RHS
+    RHS1  OBJ  -10.0
+    RHS1  LE_ROW  20.0  GE_ROW  5.0
+    RHS1  EQ_ROW  15.0  RNG_ROW  100.0
+RANGES
+    RNG1  RNG_ROW  30.0
+BOUNDS
+ UP BND1  X1  50.0
+ LO BND1  X1  -10.0
+ LO BND1  Y1  0.0
+ UI BND1  Y1  8.0
+ BV BND1  B1
+ FR BND1  X2
+ FX BND1  X3  7.0
+ENDATA
+";
+        let m1 = parse_mps_str(mps_in).unwrap();
+
+        // Verify key properties of the parsed model.
+        assert_eq!(m1.num_col, 5);
+        assert_eq!(m1.num_row, 4);
+        assert_eq!(m1.obj_sense_minimize, true);
+        assert!((m1.obj_offset - 10.0).abs() < 1e-12, "obj_offset = {}", m1.obj_offset);
+        assert_eq!(m1.col_integrality[0], VarType::Continuous); // X1
+        assert_eq!(m1.col_integrality[1], VarType::Integer);    // Y1
+        assert_eq!(m1.col_integrality[2], VarType::Continuous); // X2
+        assert_eq!(m1.col_integrality[3], VarType::Integer);    // B1
+        assert_eq!(m1.col_integrality[4], VarType::Continuous); // X3
+
+        // Bounds.
+        assert_eq!(m1.col_lower[0], -10.0);
+        assert_eq!(m1.col_upper[0], 50.0);
+        assert_eq!(m1.col_lower[1], 0.0);
+        assert_eq!(m1.col_upper[1], 8.0);
+        assert_eq!(m1.col_lower[2], -INF);
+        assert_eq!(m1.col_upper[2], INF);
+        assert_eq!(m1.col_lower[3], 0.0);
+        assert_eq!(m1.col_upper[3], 1.0);
+        assert_eq!(m1.col_lower[4], 7.0);
+        assert_eq!(m1.col_upper[4], 7.0);
+
+        // Ranged row: RNG_ROW declared L with rhs 100, range 30.
+        // → row_upper = 100, row_lower = 100 - 30 = 70.
+        assert_eq!(m1.row_lower[3], 70.0);
+        assert_eq!(m1.row_upper[3], 100.0);
+
+        // ── Write → reparse ──────────────────────────────────────
+        let mut buf = Vec::new();
+        write_mps(&m1, &mut buf).unwrap();
+        let mps_out = String::from_utf8(buf).unwrap();
+        let m2 = parse_mps_str(&mps_out)
+            .unwrap_or_else(|e| panic!("Re-parse failed:\n{mps_out}\nError: {e}"));
+
+        // ── Compare m1 vs m2 ─────────────────────────────────────
+        assert_eq!(m2.num_col, m1.num_col);
+        assert_eq!(m2.num_row, m1.num_row);
+        assert_eq!(m2.name, m1.name);
+        assert_eq!(m2.objective_name, m1.objective_name);
+        assert_eq!(m2.obj_sense_minimize, m1.obj_sense_minimize);
+        assert!(
+            (m2.obj_offset - m1.obj_offset).abs() < 1e-9,
+            "obj_offset: {} vs {}",
+            m2.obj_offset,
+            m1.obj_offset
+        );
+        assert_eq!(m2.col_names, m1.col_names);
+        assert_eq!(m2.row_names, m1.row_names);
+        assert_eq!(m2.col_integrality, m1.col_integrality);
+
+        for j in 0..m1.num_col as usize {
+            assert!(
+                (m2.col_cost[j] - m1.col_cost[j]).abs() < 1e-9,
+                "col_cost[{j}]: {} vs {}",
+                m2.col_cost[j],
+                m1.col_cost[j]
+            );
+            assert!(
+                bounds_eq(m2.col_lower[j], m1.col_lower[j]),
+                "col_lower[{j}]: {} vs {}",
+                m2.col_lower[j],
+                m1.col_lower[j]
+            );
+            assert!(
+                bounds_eq(m2.col_upper[j], m1.col_upper[j]),
+                "col_upper[{j}]: {} vs {}",
+                m2.col_upper[j],
+                m1.col_upper[j]
+            );
+        }
+        for i in 0..m1.num_row as usize {
+            assert!(
+                bounds_eq(m2.row_lower[i], m1.row_lower[i]),
+                "row_lower[{i}]: {} vs {}",
+                m2.row_lower[i],
+                m1.row_lower[i]
+            );
+            assert!(
+                bounds_eq(m2.row_upper[i], m1.row_upper[i]),
+                "row_upper[{i}]: {} vs {}",
+                m2.row_upper[i],
+                m1.row_upper[i]
+            );
+        }
+
+        // Matrix: compare CSC entry by entry.
+        assert_eq!(m2.a_matrix.start, m1.a_matrix.start);
+        assert_eq!(m2.a_matrix.index.len(), m1.a_matrix.index.len());
+        for k in 0..m1.a_matrix.index.len() {
+            assert_eq!(m2.a_matrix.index[k], m1.a_matrix.index[k]);
+            assert!(
+                (m2.a_matrix.value[k] - m1.a_matrix.value[k]).abs() < 1e-9,
+                "a_matrix.value[{k}]: {} vs {}",
+                m2.a_matrix.value[k],
+                m1.a_matrix.value[k]
+            );
+        }
+    }
+
+    fn bounds_eq(a: f64, b: f64) -> bool {
+        if a.is_infinite() && b.is_infinite() {
+            return a.signum() == b.signum();
+        }
+        (a - b).abs() < 1e-9
     }
 
     #[test]
