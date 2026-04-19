@@ -1,13 +1,16 @@
+[workspace]
+members = ["python"]
+
 [package]
 name = "numnom"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "A fast MPS file parser for mathematical programming"
 license = "Apache-2.0"
 repository = "https://github.com/mmghannam/numnom"
 keywords = ["mps", "parser", "optimization", "linear-programming", "mip"]
 categories = ["parser-implementations", "science"]
-exclude = ["temp_mps/", "*.sh", "test_output.json", "test_binary.mps", "benchmarks.csv", "HiGHS.log"]
+exclude = ["temp_mps/", "*.sh", "test_output.json", "test_binary.mps", "benchmarks.csv", "HiGHS.log", "python/"]
 
 [dependencies]
 flate2 = { version = "1.0", features = ["zlib-rs"], default-features = false }

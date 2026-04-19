@@ -1,0 +1,17 @@
+[package]
+name = "numnom-python"
+version = "0.4.0"
+edition = "2024"
+description = "Python bindings for the numnom MPS parser"
+license = "Apache-2.0"
+repository = "https://github.com/mmghannam/numnom"
+publish = false
+
+[lib]
+name = "_numnom"
+crate-type = ["cdylib"]
+
+[dependencies]
+numnom = { path = ".." }
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py38"] }
+numpy = "0.23"

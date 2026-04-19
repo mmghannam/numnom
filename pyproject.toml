@@ -1,0 +1,39 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "numnom"
+version = "0.4.0"
+description = "A fast MPS file parser for mathematical programming"
+readme = "python/README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.8"
+authors = [{ name = "Mohammed Ghannam" }]
+keywords = ["mps", "parser", "optimization", "linear-programming", "mip"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "numpy>=1.20",
+]
+
+[project.optional-dependencies]
+scipy = ["scipy>=1.6"]
+
+[project.urls]
+Homepage = "https://github.com/mmghannam/numnom"
+Repository = "https://github.com/mmghannam/numnom"
+Issues = "https://github.com/mmghannam/numnom/issues"
+
+[tool.maturin]
+manifest-path = "python/Cargo.toml"
+python-source = "python/python"
+module-name = "numnom._numnom"
+strip = true

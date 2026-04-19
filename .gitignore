@@ -4,3 +4,13 @@
 *.sh
 test_results/
 temp_mps/
+
+# Python
+.venv*/
+__pycache__/
+*.egg-info/
+dist/
+build/
+*.so
+*.pyd
+
