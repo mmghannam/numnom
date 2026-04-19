@@ -1,6 +1,6 @@
 [package]
 name = "numnom-python"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 description = "Python bindings for the numnom MPS parser"
 license = "Apache-2.0"

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "numnom"
-version = "0.4.2"
+version = "0.4.3"
 description = "A fast MPS file parser for mathematical programming"
 readme = "python/README.md"
 license = { text = "Apache-2.0" }

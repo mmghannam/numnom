@@ -77,17 +77,20 @@ jobs:
           path: dist
 
   windows:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        target: [x64, aarch64]
+        include:
+          - target: x64
+            runner: windows-latest
+          - target: aarch64
+            runner: windows-11-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          architecture: x64
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
