@@ -14,6 +14,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64, aarch64]
     steps:
@@ -35,6 +36,7 @@ jobs:
   musllinux:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64, aarch64]
     steps:
@@ -56,6 +58,7 @@ jobs:
   macos:
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64, aarch64]
     steps:
@@ -76,6 +79,7 @@ jobs:
   windows:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         target: [x64, aarch64]
     steps:
